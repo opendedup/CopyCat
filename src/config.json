@@ -1,0 +1,28 @@
+{
+"persist-path" : "c:\\tmp\\",
+"debug" : false,
+"servers" : [ {
+	"port" : 6442,
+	"host": "13.91.96.131",
+	"password" : "admin",
+	"volumeid" : 1946910884,
+	"listen" : true,
+	"update" : true
+},
+{
+	"port" : 6442,
+	"host": "13.91.7.83",
+	"password" : "admin",
+	"volumeid" : 194691008,
+	"listen" : true,
+	"update" : true
+},
+{
+	"port" : 6442,
+	"host": "108.59.80.197",
+	"password" : "@zaGleH7NT",
+	"volumeid" : 1946910,
+	"listen" : false,
+	"update" : true
+}]
+}
