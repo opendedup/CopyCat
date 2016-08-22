@@ -54,25 +54,43 @@ The volume id's will be listed in the **ID** column. Keep note of these volume i
 CopyCat is configured throught the config.json file within the tar package.
 
     {
-"persist-path" : "/tmp",
-"debug" : true,
-"servers" : [ {
+    "persist-path" : "/tmp",
+    "debug" : true,
+    "servers" : [ {
         "port" : 6442,
-        "host": "192.168.0.180",
+        "host": "host0",
         "password" : "admin",
         "volumeid" : 272362632702517055,
         "listen" : true,
         "update" : true
-},
-{
+    },
+    {
         "port" : 6442,
-        "host": "192.168.0.181",
+        "host": "host1",
         "password" : "admin",
         "volumeid" : 1900326592403395044,
         "listen" : true,
         "update" : true
-}
-]
-}
+    }]
+    }
+
+**persist-path:** This is the path where changes will peristed until they are committed to the other volumes
+**debug:** Should debug output be sent to standard out
+**servers:** An array of volumes that copycat will listen and commit changes to
+**port:** The TCP port that the SDFS Volume is listening on for control. This is 6442 by default but increments up based on the number of volumes mounted on the host.
+**host:** The hostname or IP address that the SDFS Volume is on
+**password:** The password that was set for authenticating to the volume. This was set during volume creation with the --sdfscli-password parameter
+**volumeid:** The id for the volume as showin with sdfscli --list-cloud-volumes
+**listen:** If set to true will listen for volume changes and notify other volumes when changes occure
+**update:** It set to true copycat will notify the volume when changes occure on other volumes.
+
+**Step 5 - Start CopyCat**
+
+CopyCat requires java 8+. Mutilple instances of copycat can be running on multiple systems using the same config to provide high availability.
+
+    java -cp cc.jar:libs/* com.datish.copycat.Server config.json
+
+
+
 
 
