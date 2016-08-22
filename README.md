@@ -16,9 +16,11 @@ To user copycat your sdfs volume must meet the following requirements:
 5. The SDFS volumes must be accessable from the copycat service.
 
 ## Setup Guide for using Filesync service
+
 The below example will allow two volumes to share metadata. It assumes there are two hosts (host1 and host2). This can also run on a single host but the port for volume one would be 6442 and volume2 would be **6443**. In addition if you are testing this on one host the volume-name for volume2 would be **pool1**.
 
 **Step 1 - Create two SDFS Volumes**
+
 As stated above, all volumes must share the same bucket for filesync to work. In addition the control port mu
 
 On host1 create a volume
@@ -51,6 +53,7 @@ The volume id's will be listed in the **ID** column. Keep note of these volume i
 ![alt tag](http://www.opendedup.org/images/serialnumber.png)
 
 **Step 4 - Configure CopyCat**
+
 CopyCat is configured throught the config.json file within the tar package.
 
     {
@@ -75,13 +78,21 @@ CopyCat is configured throught the config.json file within the tar package.
     }
 
 **persist-path:** This is the path where changes will peristed until they are committed to the other volumes
+
 **debug:** Should debug output be sent to standard out
+
 **servers:** An array of volumes that copycat will listen and commit changes to
+
 **port:** The TCP port that the SDFS Volume is listening on for control. This is 6442 by default but increments up based on the number of volumes mounted on the host.
-**host:** The hostname or IP address that the SDFS Volume is on
+
+**host:** The hostname or IP address that the SDFS Volume is on.
+
 **password:** The password that was set for authenticating to the volume. This was set during volume creation with the --sdfscli-password parameter
+
 **volumeid:** The id for the volume as showin with sdfscli --list-cloud-volumes
+
 **listen:** If set to true will listen for volume changes and notify other volumes when changes occure
+
 **update:** It set to true copycat will notify the volume when changes occure on other volumes.
 
 **Step 5 - Start CopyCat**
