@@ -5,6 +5,8 @@ This service is used in conjuction with the SDFS Filesystem to allow multiple SD
 
 It is particularly useful when using with backup to cloud storage becuase is allows different backup servers to restore images regardless of location of the origional backup.
 
+CopyCat is licensed under the [Apache License](http://www.apache.org/licenses/LICENSE-2.0)
+
 To user copycat your sdfs volume must meet the following requirements:
 
 1. Must use an object store backend such as S3,Azure,Google,swift
@@ -20,10 +22,57 @@ The below example will allow two volumes to share metadata. It assumes there are
 As stated above, all volumes must share the same bucket for filesync to work. In addition the control port mu
 
 On host1 create a volume
-    mkfs.sdfs --volume-name=pool0 --volume-capacity=1TB --cloud-secret-key=<secret> --cloud-access-key=<access-key> --cloud-bucket-name=<a shared bucket name> --aws-enabled=true --enable-replication-master
-On host2 create a volume with the same bucket name
-   mkfs.sdfs --volume-name=pool0 --volume-capacity=1TB --cloud-secret-key=<secret> --cloud-access-key=<access-key> --cloud-bucket-name=<a shared bucket name> --aws-enabled=true --enable-replication-master
 
+    mkfs.sdfs --volume-name=pool0 --volume-capacity=1TB --cloud-secret-key=<secret> --cloud-access-key=<access-key> --cloud-bucket-name=<a shared bucket name> --aws-enabled=true --enable-replication-master --sdfscli-password=apassword
+    
+On host2 create a volume with the same bucket name
+
+    mkfs.sdfs --volume-name=pool0 --volume-capacity=1TB --cloud-secret-key=<secret> --cloud-access-key=<access-key> --cloud-bucket-name=<a shared bucket name> --aws-enabled=true --enable-replication-master --sdfscli-password=apassword
+
+**Step 2 - Mount both volumes**
+
+On host 1
+
+    mount -t sdfs pool0 /mnt
+    
+On host 2
+
+    mount -t sdfs pool0 /mnt
+
+**Step 3 - Get Volume IDs for each volume**
+In this step you will want to verify both volumes are sharing the same pool and get their volume ids. This command can be run on either host.
+    
+  sdfscli --list-cloud-volumes
   
+![alt tag](http://www.opendedup.org/images/listcloudvolumes.png)
+  
+The volume id's will be listed in the **ID** column. Keep note of these volume id's. The volume ids are also contained the config.xml documents for the volumes in the **serial-number** tag.
+
+![alt tag](http://www.opendedup.org/images/serialnumber.png)
+
+**Step 4 - Configure CopyCat**
+CopyCat is configured throught the config.json file within the tar package.
+
+    {
+"persist-path" : "/tmp",
+"debug" : true,
+"servers" : [ {
+        "port" : 6442,
+        "host": "192.168.0.180",
+        "password" : "admin",
+        "volumeid" : 272362632702517055,
+        "listen" : true,
+        "update" : true
+},
+{
+        "port" : 6442,
+        "host": "192.168.0.181",
+        "password" : "admin",
+        "volumeid" : 1900326592403395044,
+        "listen" : true,
+        "update" : true
+}
+]
+}
 
 
