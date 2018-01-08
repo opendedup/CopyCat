@@ -24,6 +24,7 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 
 import org.apache.http.HttpEntity;
+import org.apache.http.client.config.CookieSpecs;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -41,12 +42,20 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 public class SDFSHttpClient {
+static CloseableHttpClient httpsClient = null;
 static CloseableHttpClient httpClient = null;
 	
 	
 	static {
 		try {
-			httpClient = httpClientTrustingAllSSLCerts();
+			httpsClient = httpClientTrustingAllSSLCerts();
+			PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
+			RequestConfig config = RequestConfig.custom()
+					  .setConnectTimeout(10000).setCookieSpec(CookieSpecs.STANDARD)
+					  .setConnectionRequestTimeout(10000)
+					  .setSocketTimeout(3000).build();
+			httpClient = HttpClients.custom().setDefaultRequestConfig(config)
+			        .setConnectionManager(cm).build();
 		} catch (Throwable e) {
 			e.printStackTrace();
 
@@ -81,11 +90,17 @@ static CloseableHttpClient httpClient = null;
 		        .setConnectionManager(cm).build();
 		return httpclient;
 	}
+	
+	
 	public static void getResponse(String url) throws IOException, SDFSHttpMsgException {
 		try {
 
 			HttpGet httpGet = new HttpGet(url);
-			CloseableHttpResponse response = httpClient.execute(httpGet);
+			CloseableHttpResponse response = null;
+			if(url.toLowerCase().startsWith("https"))
+				response = httpsClient.execute(httpGet);
+			else
+				response = httpClient.execute(httpGet);
 			try {
 				if(response.getStatusLine().getStatusCode() != 200) {
 					throw new IOException("Status returned = " + response.getStatusLine().getStatusCode() + " " + response.getStatusLine().getReasonPhrase());

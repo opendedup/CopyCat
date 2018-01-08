@@ -50,6 +50,7 @@ public class Server implements Runnable {
 	private boolean listen;
 	private boolean update;
 	private long volumeID;
+	private boolean useSSL;
 	private WebSocketUploadListener ws = null;
 	private static ConcurrentHashMap<Long, Server> servers = new ConcurrentHashMap<Long, Server>();
 	private String baseURL;
@@ -62,7 +63,7 @@ public class Server implements Runnable {
 	private static ReentrantLock iLock = new ReentrantLock(true);
 
 	public Server(long volumeID, String hostName, int port, String password,
-			boolean listen, boolean update) throws IOException {
+			boolean listen, boolean update,boolean useSSL) throws IOException {
 		try {
 			this.port = port;
 			this.volumeID = volumeID;
@@ -70,7 +71,11 @@ public class Server implements Runnable {
 			this.password = password;
 			this.listen = listen;
 			this.update = update;
-			this.baseURL = "https://" + this.hostName + ":" + this.port
+			this.useSSL = useSSL;
+			String proto = "https";
+			if(!useSSL)
+				proto = "http";
+			this.baseURL = proto +"://" + this.hostName + ":" + this.port
 					+ "/?password=" + URLEncoder.encode(this.password, "UTF-8")
 					+ "&";
 			if (this.listen) {
@@ -209,7 +214,10 @@ public class Server implements Runnable {
 					} catch (Exception e) {
 
 					}
-					ws = new WebSocketUploadListener(hostName, port, password);
+					String cs = "wss";
+					if(!this.useSSL)
+						cs = "ws";
+					ws = new WebSocketUploadListener(hostName, port, password,cs);
 					ws.connect(hostName, port);
 				}
 				Thread.sleep(10000);
@@ -265,6 +273,7 @@ public class Server implements Runnable {
 		JsonArray jar = cfg.getAsJsonArray("servers");
 		for (int i = 0; i < jar.size(); i++) {
 			try {
+				boolean useSSL = true;
 				JsonObject obj = jar.get(i).getAsJsonObject();
 				int port = obj.get("port").getAsInt();
 				long volid = obj.get("volumeid").getAsLong();
@@ -272,7 +281,9 @@ public class Server implements Runnable {
 				String password = obj.get("password").getAsString();
 				boolean listen = obj.get("listen").getAsBoolean();
 				boolean update = obj.get("update").getAsBoolean();
-				new Server(volid, hostName, port, password, listen, update);
+				if(obj.has("useSSL"))
+					useSSL = obj.get("useSSL").getAsBoolean();
+				new Server(volid, hostName, port, password, listen, update,useSSL);
 			} catch (Exception e) {
 				System.out.println("Unable to attach server");
 				e.printStackTrace();
@@ -359,7 +370,7 @@ public class Server implements Runnable {
 										s.updateMap.remove(file);
 									} catch (Exception e) {
 										logger.debug(
-												"unable to delete " + file+ " on " + this.s.hostName + ":" + this.s.port, e);
+												"unable to delete mf " + file+ " on " + this.s.hostName + ":" + this.s.port, e);
 									}
 								} else if (evt.isDBUpdate()) {
 									try {
@@ -368,7 +379,7 @@ public class Server implements Runnable {
 										logger.debug("Updating File [" + file
 												+ "] ");
 										formatter
-												.format("file=%s&cmd=clouddbfile&changeid=%s",
+												.format("file=%s&cmd=cloudfile&overwrite=true&changeid=%s",
 														file,evt.getChangeID());
 										String url = s.baseURL + sb.toString();
 										formatter.close();
@@ -378,7 +389,7 @@ public class Server implements Runnable {
 										s.updateMap.remove(file);
 									} catch (Exception e) {
 										logger.debug(
-												"unable to delete " + file+ " on " + this.s.hostName + ":" + this.s.port, e);
+												"unable to update ddb " + file+ " on " + this.s.hostName + ":" + this.s.port, e);
 									}
 								} else {
 									set.remove(file);

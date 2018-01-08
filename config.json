@@ -1,28 +1,22 @@
 {
 "persist-path" : "c:\\tmp\\",
-"debug" : false,
+"debug" : true,
 "servers" : [ {
 	"port" : 6442,
-	"host": "13.91.96.131",
+	"host": "192.168.0.220",
+	"useSSL" : false,
 	"password" : "admin",
-	"volumeid" : 1946910884,
+	"volumeid" : 6079440378550887066,
 	"listen" : true,
 	"update" : true
 },
 {
 	"port" : 6442,
-	"host": "13.91.7.83",
+	"useSSL" : false,
+	"host": "192.168.0.221",
 	"password" : "admin",
-	"volumeid" : 194691008,
+	"volumeid" : 1307790433868517786,
 	"listen" : true,
-	"update" : true
-},
-{
-	"port" : 6442,
-	"host": "108.59.80.197",
-	"password" : "@zaGleH7NT",
-	"volumeid" : 1946910,
-	"listen" : false,
 	"update" : true
 }]
 }

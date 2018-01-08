@@ -16,6 +16,11 @@
 			<attribute name="maven.pomderived" value="true"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry kind="lib" path="C:/Users/samsilverberg/Documents/GitHub/sdfs/install-packages/deb/usr/share/sdfs/lib/guava-19.0.jar"/>
+	<classpathentry kind="src" output="target/test-classes" path="test/java">
+		<attributes>
+			<attribute name="optional" value="true"/>
+			<attribute name="maven.pomderived" value="true"/>
+		</attributes>
+	</classpathentry>
 	<classpathentry kind="output" path="target/classes"/>
 </classpath>

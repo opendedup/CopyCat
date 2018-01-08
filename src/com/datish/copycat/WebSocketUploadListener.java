@@ -45,16 +45,19 @@ public class WebSocketUploadListener extends WebSocketClient {
 		eventUploadBus.register(obj);
 	}
 	
-	public WebSocketUploadListener(String server, int port, String password)
+	public WebSocketUploadListener(String server, int port, String password,String cs)
 			throws UnsupportedEncodingException, URISyntaxException, NoSuchAlgorithmException, KeyManagementException, KeyStoreException, InterruptedException {
-		super(new URI("wss://" + server + ":" + port
+		
+		super(new URI(cs +"://" + server + ":" + port
 				+ "/uploadsocket?password="
 				+ URLEncoder.encode(password, "UTF-8")), new Draft_17());
 		SSLContext sslContext = null;
+		if(cs.equalsIgnoreCase("wss")) {
 		sslContext = SSLContext.getInstance( "TLS" );
 		sslContext.init( null, new TrustManager[] {new EasyX509TrustManager(null)}, null );
 		// sslContext.init( null, null, null ); // will use java's default key and trust store which is sufficient unless you deal with self-signed certificates
 		this.setWebSocketFactory( new DefaultSSLWebSocketClientFactory(sslContext));
+		}
 		// TODO Auto-generated constructor stub
 	}
 	

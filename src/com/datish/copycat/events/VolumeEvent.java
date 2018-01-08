@@ -46,6 +46,8 @@ public class VolumeEvent implements Serializable {
 		this.sequence = obj.get("sequence").getAsLong();
 		this.actionType = obj.get("actionType").getAsString();
 		this.target = obj.get("object").getAsString();
+		if(obj.has("file"))
+			this.target = obj.get("file").getAsString();
 		this.jsonStr = jsonStr;
 	}
 	
