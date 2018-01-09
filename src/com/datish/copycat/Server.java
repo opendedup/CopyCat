@@ -339,7 +339,7 @@ public class Server implements Runnable {
 										logger.debug("Updating File [" + file
 												+ "] ");
 										formatter.format(
-												"file=%s&cmd=cloudmfile&changeid=%s", file,evt.getChangeID());
+												"file=%s&cmd=cloudmfile&changeid=%s", URLEncoder.encode(file,"UTF-8"),evt.getChangeID());
 										String url = s.baseURL + sb.toString();
 										formatter.close();
 										logger.debug("sending " + url);
@@ -358,7 +358,7 @@ public class Server implements Runnable {
 												+ "] ");
 										formatter.format(
 												"file=%s&cmd=%s&options=%s&changeid=%s",
-												file, "deletefile", "",evt.getChangeID());
+												URLEncoder.encode(file,"UTF-8"), "deletefile", "",evt.getChangeID());
 										String url = s.baseURL + sb.toString();
 										formatter.close();
 										logger.debug("sending " + url);
@@ -380,7 +380,7 @@ public class Server implements Runnable {
 												+ "] ");
 										formatter
 												.format("file=%s&cmd=cloudfile&overwrite=true&changeid=%s",
-														file,evt.getChangeID());
+														URLEncoder.encode(file,"UTF-8"),evt.getChangeID());
 										String url = s.baseURL + sb.toString();
 										formatter.close();
 										logger.debug("sending " + url);
