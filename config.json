@@ -3,19 +3,19 @@
 "debug" : true,
 "servers" : [ {
 	"port" : 6442,
-	"host": "192.168.0.220",
+	"host": "localhost",
 	"useSSL" : false,
 	"password" : "admin",
-	"volumeid" : 6079440378550887066,
+	"volumeid" : 2657506072912134944,
 	"listen" : true,
 	"update" : true
 },
 {
-	"port" : 6442,
+	"port" : 6443,
 	"useSSL" : false,
-	"host": "192.168.0.221",
+	"host": "localhost",
 	"password" : "admin",
-	"volumeid" : 1307790433868517786,
+	"volumeid" : 2574165121395644316,
 	"listen" : true,
 	"update" : true
 }]
