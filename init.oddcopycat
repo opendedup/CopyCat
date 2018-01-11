@@ -1,12 +1,15 @@
 #! /bin/sh
 #  /etc/init.d/oddcopycat
 
+# chkconfig: 235 77 01
+# description: ODDCOPYCAT
+
 ### BEGIN INIT INFO
 # Provides:          oddcopycat
 # Required-Start:    $remote_fs $syslog
 # Required-Stop:     $remote_fs $syslog
 # Short-Description: Starts the OpenDedupe Copycat service
-# Description:       This file is used to start the daemon
+# Description:       This file is used to start the CopyCat daemon
 #                    and should be placed in /etc/init.d
 ### END INIT INFO
 
