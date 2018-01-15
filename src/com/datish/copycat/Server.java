@@ -16,6 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
  */
 import java.io.File;
+
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,7 +32,6 @@ import org.apache.commons.io.IOUtils;
 import org.mapdb.DB;
 import org.mapdb.DBMaker;
 import org.mapdb.Serializer;
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.datish.copycat.events.VolumeEvent;
@@ -42,6 +42,17 @@ import com.google.common.eventbus.Subscribe;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.rolling.FixedWindowRollingPolicy;
+import ch.qos.logback.core.rolling.RollingFileAppender;
+import ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy;
+import ch.qos.logback.core.util.FileSize;
+import ch.qos.logback.core.util.StatusPrinter;
 
 public class Server implements Runnable {
 	public static String PERSISTENCE_PATH = "c:\\tmp\\";
@@ -56,7 +67,7 @@ public class Server implements Runnable {
 	protected static ConcurrentHashMap<Long, Server> servers = new ConcurrentHashMap<Long, Server>();
 	private String baseURL;
 	private boolean closed = true;
-	Logger logger = LoggerFactory.getLogger(Server.class);
+	Logger logger = null;
 	private ConcurrentHashMap<String, ReentrantLock> activeTasks = new ConcurrentHashMap<String, ReentrantLock>();
 	ConcurrentMap<String, String> updateMap = null;
 	DB db = null;
@@ -69,6 +80,8 @@ public class Server implements Runnable {
 	public Server(long volumeID, String hostName, int port, String password, boolean listen, boolean update,
 			boolean useSSL) throws IOException {
 		try {
+			logger = (Logger) LoggerFactory.getLogger("server-" +Long.toString(volumeID));
+			
 			this.port = port;
 			this.volumeID = volumeID;
 			this.hostName = hostName;
@@ -281,16 +294,28 @@ public class Server implements Runnable {
 		}
 
 		InputStream is = new FileInputStream(args[0]);
+		boolean ldbg =false;
+		
 		String jsonTxt = IOUtils.toString(is, "UTF-8");
 		JsonParser parser = new JsonParser();
 		JsonObject cfg = parser.parse(jsonTxt).getAsJsonObject();
-		if (cfg.has("debug") && cfg.get("debug").getAsBoolean()) {
-			System.setProperty(org.slf4j.impl.SimpleLogger.DEFAULT_LOG_LEVEL_KEY, "TRACE");
-		}
+		
+		
 		PERSISTENCE_PATH = cfg.get("persist-path").getAsString();
 		if (!new File(PERSISTENCE_PATH).exists()) {
 			new File(PERSISTENCE_PATH).mkdirs();
 		}
+		String logFile = PERSISTENCE_PATH + File.separator + "oddcopycat.log";
+		if (cfg.has("debug") && cfg.get("debug").getAsBoolean()) {
+			ldbg = cfg.get("debug").getAsBoolean();
+		}
+		if(cfg.has("log-file")) {
+			logFile = cfg.get("log-file").getAsString();
+			 	
+
+		}
+		
+		startFileLogging(logFile,ldbg);
 		JsonArray jar = cfg.getAsJsonArray("servers");
 		for (int i = 0; i < jar.size(); i++) {
 			try {
@@ -317,6 +342,54 @@ public class Server implements Runnable {
 		Server.attachShutDownHook();
 
 	}
+	
+	public static Logger startFileLogging(String logFilePath,boolean debug) {
+		
+	    
+	   
+	    LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+	    ch.qos.logback.classic.Logger rootLogger = loggerContext.getLogger(ch.qos.logback.classic.Logger.ROOT_LOGGER_NAME);
+	    loggerContext.reset(); 
+	    if(debug)
+	    	rootLogger.setLevel(Level.DEBUG);
+	    else
+	    	rootLogger.setLevel(Level.INFO);
+
+	    RollingFileAppender<ILoggingEvent> rfAppender = new RollingFileAppender<ILoggingEvent>(); 
+	    rfAppender.setContext(loggerContext); 
+	    rfAppender.setFile(logFilePath);
+	    
+	    
+
+	    FixedWindowRollingPolicy fwRollingPolicy = new FixedWindowRollingPolicy(); 
+	    fwRollingPolicy.setContext(loggerContext); 
+	    fwRollingPolicy.setFileNamePattern(logFilePath +"-%i.log.zip"); 
+	    fwRollingPolicy.setParent(rfAppender); 
+	    fwRollingPolicy.setMaxIndex(5);
+	    fwRollingPolicy.start(); 
+
+	    SizeBasedTriggeringPolicy<ILoggingEvent> triggeringPolicy = new SizeBasedTriggeringPolicy<ILoggingEvent>(); 
+	    triggeringPolicy.setMaxFileSize(FileSize.valueOf("10MB")); 
+	    triggeringPolicy.start(); 
+
+	    PatternLayoutEncoder encoder = new PatternLayoutEncoder();
+	    encoder.setContext(loggerContext); 
+	    encoder.setPattern("%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"); 
+	    encoder.start(); 
+
+	    rfAppender.setEncoder(encoder); 
+	    rfAppender.setRollingPolicy(fwRollingPolicy); 
+	    rfAppender.setTriggeringPolicy(triggeringPolicy); 
+	    rfAppender.start(); 
+
+	    rootLogger.addAppender(rfAppender); 
+
+	    // generate some output 
+
+	    StatusPrinter.print(loggerContext); 
+        return rootLogger;
+
+	}
 
 	protected static void startServers() {
 		System.out.println("Starting [" + servers.size() + "] Server Listeners");
@@ -332,6 +405,8 @@ public class Server implements Runnable {
 	}
 
 	public static void main(String[] args) throws IOException, InterruptedException {
+		
+		
 		setup(args);
 		startServers();
 		if (args.length > 1) {
@@ -352,11 +427,13 @@ public class Server implements Runnable {
 	}
 
 	private static class UpdateProcessor implements Runnable {
-		Logger logger = LoggerFactory.getLogger(UpdateProcessor.class);
+		Logger logger = null;
 		Server s = null;
 		Thread th = null;
 
 		protected UpdateProcessor(Server s) {
+			logger = (Logger)LoggerFactory.getLogger("update-"+s.volumeID);
+			
 			this.s = s;
 			th = new Thread(this);
 			th.start();
@@ -375,6 +452,7 @@ public class Server implements Runnable {
 							try {
 								VolumeEvent evt = new VolumeEvent(s.updateMap.get(file));
 								long ts = System.currentTimeMillis() - evt.getInternalTS();
+								
 								if (ts > s.updateTime) {
 									if (evt.getVolumeID() != this.s.volumeID) {
 										if (evt.isMFUpdate()) {
@@ -442,6 +520,9 @@ public class Server implements Runnable {
 										s.updateMap.remove(file);
 										logger.debug("ignoring");
 									}
+								} else {
+									logger.debug("Waiting on event time diff =" +ts);
+									
 								}
 
 							} finally {

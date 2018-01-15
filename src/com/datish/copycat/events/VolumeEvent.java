@@ -16,6 +16,7 @@ limitations under the License.
  */
 import java.io.Serializable;
 
+
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -42,16 +43,20 @@ public class VolumeEvent implements Serializable {
 		obj = parser.parse(jsonStr).getAsJsonObject();
 		this.volumeID = obj.get("volumeid").getAsLong();
 		this.volumeTS = obj.get("timestamp").getAsLong();
-		if(!obj.has("internalts"))
+		if(!obj.has("internalts")) {
+			
 			this.internalTS = System.currentTimeMillis();
-		else
+			obj.addProperty("internalts", this.internalTS);
+		}
+		else 
 			this.internalTS = obj.get("internalts").getAsLong();
+		
 		this.sequence = obj.get("sequence").getAsLong();
 		this.actionType = obj.get("actionType").getAsString();
 		this.target = obj.get("object").getAsString();
 		if(obj.has("file"))
 			this.target = obj.get("file").getAsString();
-		this.jsonStr = jsonStr;
+		this.jsonStr = obj.toString();
 	}
 	
 	public String getJsonString() {
