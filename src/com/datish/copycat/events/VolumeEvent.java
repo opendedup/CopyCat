@@ -42,7 +42,10 @@ public class VolumeEvent implements Serializable {
 		obj = parser.parse(jsonStr).getAsJsonObject();
 		this.volumeID = obj.get("volumeid").getAsLong();
 		this.volumeTS = obj.get("timestamp").getAsLong();
-		this.internalTS = System.currentTimeMillis();
+		if(!obj.has("internalts"))
+			this.internalTS = System.currentTimeMillis();
+		else
+			this.internalTS = obj.get("internalts").getAsLong();
 		this.sequence = obj.get("sequence").getAsLong();
 		this.actionType = obj.get("actionType").getAsString();
 		this.target = obj.get("object").getAsString();

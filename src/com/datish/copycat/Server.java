@@ -63,6 +63,8 @@ public class Server implements Runnable {
 	UpdateProcessor up = null;
 	Thread th = null;
 	private static ReentrantLock iLock = new ReentrantLock(true);
+	long updateTime = 20000;
+	long checkTime = 5000;
 
 	public Server(long volumeID, String hostName, int port, String password, boolean listen, boolean update,
 			boolean useSSL) throws IOException {
@@ -83,7 +85,6 @@ public class Server implements Runnable {
 		} catch (Exception e) {
 			throw new IOException(e);
 		}
-
 		servers.put(this.volumeID, this);
 		logger.info("added " + this.toString());
 	}
@@ -99,7 +100,7 @@ public class Server implements Runnable {
 					if (this.update) {
 						WebSocketUploadListener.registerEvents(this);
 						db = DBMaker.fileDB(PERSISTENCE_PATH + File.separator + this.volumeID + ".db")
-								.closeOnJvmShutdown()
+								.closeOnJvmShutdown().transactionEnable()
 								// TODO memory mapped files enable here
 								.make();
 						updateMap = db.hashMap("map", Serializer.STRING, Serializer.STRING).createOrOpen();
@@ -108,7 +109,7 @@ public class Server implements Runnable {
 					}
 					logger.info("Server Started for " + this.volumeID);
 				} else {
-					System.out.println("ssss");
+					System.out.println("Service already started");
 				}
 			} catch (Exception e) {
 				throw new IOException(e);
@@ -213,7 +214,10 @@ public class Server implements Runnable {
 		try {
 			this.updateMap.put(evt.getTarget(), evt.getJsonString());
 		} finally {
-			this.db.commit();
+			try {
+				this.db.commit();
+			} catch (Exception e) {
+			}
 			removeLock(evt.getTarget());
 		}
 	}
@@ -300,19 +304,22 @@ public class Server implements Runnable {
 				boolean update = obj.get("update").getAsBoolean();
 				if (obj.has("useSSL"))
 					useSSL = obj.get("useSSL").getAsBoolean();
-				new Server(volid, hostName, port, password, listen, update, useSSL);
+				Server s = new Server(volid, hostName, port, password, listen, update, useSSL);
+				if(obj.has("update-interval"))
+					s.updateTime = obj.get("update-interval").getAsLong();
+				if(obj.has("check-interval"))
+					s.checkTime = obj.get("check-interval").getAsLong();
 			} catch (Exception e) {
 				System.out.println("Unable to attach server");
 				e.printStackTrace();
 			}
 		}
 		Server.attachShutDownHook();
-		
 
 	}
 
 	protected static void startServers() {
-		System.out.println("Starting ["+ servers.size()+"] Server Listeners");
+		System.out.println("Starting [" + servers.size() + "] Server Listeners");
 		for (Server s : servers.values()) {
 			try {
 				s.startServer();
@@ -323,8 +330,8 @@ public class Server implements Runnable {
 		}
 		System.out.println("Servers Started");
 	}
-	
-	public static void main(String [] args) throws IOException, InterruptedException {
+
+	public static void main(String[] args) throws IOException, InterruptedException {
 		setup(args);
 		startServers();
 		if (args.length > 1) {
@@ -341,7 +348,7 @@ public class Server implements Runnable {
 				Thread.sleep(10000);
 			}
 		}
-		
+
 	}
 
 	private static class UpdateProcessor implements Runnable {
@@ -359,7 +366,7 @@ public class Server implements Runnable {
 		public void run() {
 			for (;;) {
 				try {
-					Thread.sleep(10000);
+					Thread.sleep(s.checkTime);
 					synchronized (th) {
 						Set<String> set = s.updateMap.keySet();
 						for (String file : set) {
@@ -367,69 +374,74 @@ public class Server implements Runnable {
 							l.lock();
 							try {
 								VolumeEvent evt = new VolumeEvent(s.updateMap.get(file));
-								if (evt.getVolumeID() != this.s.volumeID) {
-									if (evt.isMFUpdate()) {
-										try {
-											StringBuilder sb = new StringBuilder();
-											Formatter formatter = new Formatter(sb);
-											logger.debug("Updating File [" + file + "] ");
-											formatter.format("file=%s&cmd=cloudmfile&overwrite=true&changeid=%s",
-													URLEncoder.encode(file, "UTF-8"), evt.getChangeID());
-											String url = s.baseURL + sb.toString();
-											formatter.close();
-											logger.debug("sending " + url);
-											SDFSHttpClient.getResponse(url);
+								long ts = System.currentTimeMillis() - evt.getInternalTS();
+								if (ts > s.updateTime) {
+									if (evt.getVolumeID() != this.s.volumeID) {
+										if (evt.isMFUpdate()) {
+											try {
+												StringBuilder sb = new StringBuilder();
+												Formatter formatter = new Formatter(sb);
+												logger.debug("Updating File [" + file + "] ");
+												formatter.format("file=%s&cmd=cloudmfile&overwrite=true&changeid=%s",
+														URLEncoder.encode(file, "UTF-8"), evt.getChangeID());
+												String url = s.baseURL + sb.toString();
+												formatter.close();
+												logger.debug("sending " + url);
+												SDFSHttpClient.getResponse(url);
+												set.remove(file);
+												s.updateMap.remove(file);
+											} catch (Exception e) {
+												logger.debug("unable to update " + file + " on " + this.s.hostName + ":"
+														+ this.s.port, e);
+											}
+										} else if (evt.isMFDelete()) {
+											try {
+												StringBuilder sb = new StringBuilder();
+												Formatter formatter = new Formatter(sb);
+												logger.debug("Deleting File [" + file + "] ");
+												formatter.format(
+														"file=%s&cmd=%s&options=%s&changeid=%s&retentionlock=true",
+														URLEncoder.encode(file, "UTF-8"), "deletefile", "",
+														evt.getChangeID());
+												String url = s.baseURL + sb.toString();
+												formatter.close();
+												logger.debug("sending " + url);
+												SDFSHttpClient.getResponse(url);
+												set.remove(file);
+												s.updateMap.remove(file);
+											} catch (SDFSHttpMsgException e) {
+												logger.debug("Delete File ["+ file +"] failed because " + e.getMessage());
+												set.remove(file);
+												s.updateMap.remove(file);
+											} catch (Exception e) {
+												logger.debug("unable to delete mf " + file + " on " + this.s.hostName
+														+ ":" + this.s.port, e);
+											}
+										} else if (evt.isDBUpdate()) {
+											try {
+												StringBuilder sb = new StringBuilder();
+												Formatter formatter = new Formatter(sb);
+												logger.debug("Updating File [" + file + "] ");
+												formatter.format("file=%s&cmd=cloudfile&overwrite=true&changeid=%s",
+														URLEncoder.encode(file, "UTF-8"), evt.getChangeID());
+												String url = s.baseURL + sb.toString();
+												formatter.close();
+												logger.debug("sending " + url);
+												SDFSHttpClient.getResponse(url);
+												set.remove(file);
+												s.updateMap.remove(file);
+											} catch (Exception e) {
+												logger.debug("unable to update ddb " + file + " on " + this.s.hostName
+														+ ":" + this.s.port, e);
+											}
+										} else {
 											set.remove(file);
 											s.updateMap.remove(file);
-										} catch (Exception e) {
-											logger.debug("unable to update " + file + " on " + this.s.hostName + ":"
-													+ this.s.port, e);
-										}
-									} else if (evt.isMFDelete()) {
-										try {
-											StringBuilder sb = new StringBuilder();
-											Formatter formatter = new Formatter(sb);
-											logger.debug("Deleting File [" + file + "] ");
-											formatter.format("file=%s&cmd=%s&options=%s&changeid=%s&retentionlock=true",
-													URLEncoder.encode(file, "UTF-8"), "deletefile", "",
-													evt.getChangeID());
-											String url = s.baseURL + sb.toString();
-											formatter.close();
-											logger.debug("sending " + url);
-											SDFSHttpClient.getResponse(url);
-											set.remove(file);
-											s.updateMap.remove(file);
-										} catch (SDFSHttpMsgException e) {
-											set.remove(file);
-											s.updateMap.remove(file);
-										} catch (Exception e) {
-											logger.debug("unable to delete mf " + file + " on " + this.s.hostName + ":"
-													+ this.s.port, e);
-										}
-									} else if (evt.isDBUpdate()) {
-										try {
-											StringBuilder sb = new StringBuilder();
-											Formatter formatter = new Formatter(sb);
-											logger.debug("Updating File [" + file + "] ");
-											formatter.format("file=%s&cmd=cloudfile&overwrite=true&changeid=%s",
-													URLEncoder.encode(file, "UTF-8"), evt.getChangeID());
-											String url = s.baseURL + sb.toString();
-											formatter.close();
-											logger.debug("sending " + url);
-											SDFSHttpClient.getResponse(url);
-											set.remove(file);
-											s.updateMap.remove(file);
-										} catch (Exception e) {
-											logger.debug("unable to update ddb " + file + " on " + this.s.hostName + ":"
-													+ this.s.port, e);
 										}
 									} else {
-										set.remove(file);
 										s.updateMap.remove(file);
+										logger.debug("ignoring");
 									}
-								} else {
-									s.updateMap.remove(file);
-									logger.debug("ignoring");
 								}
 
 							} finally {
