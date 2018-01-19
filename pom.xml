@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>CopyCat</groupId>
   <artifactId>cc</artifactId>
-  <version>1.3.0</version>
+  <version>1.5.0</version>
   <name>SDFS File Sync</name>
   <description>A File Sync Service for SDFS</description>
   <build>

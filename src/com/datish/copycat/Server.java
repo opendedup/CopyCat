@@ -17,9 +17,11 @@ limitations under the License.
  */
 import java.io.File;
 
+
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.URLEncoder;
 import java.util.Formatter;
 import java.util.Map.Entry;
@@ -35,6 +37,7 @@ import org.mapdb.Serializer;
 import org.slf4j.LoggerFactory;
 
 import com.datish.copycat.events.VolumeEvent;
+import com.datish.copycat.util.MountService;
 import com.datish.copycat.util.SDFSHttpClient;
 import com.datish.copycat.util.SDFSHttpMsgException;
 import com.google.common.eventbus.AllowConcurrentEvents;
@@ -55,6 +58,8 @@ import ch.qos.logback.core.util.FileSize;
 import ch.qos.logback.core.util.StatusPrinter;
 
 public class Server implements Runnable {
+	public static String version = null;
+	public static String ts = null;
 	public static String PERSISTENCE_PATH = "c:\\tmp\\";
 	private int port;
 	private String hostName;
@@ -63,6 +68,10 @@ public class Server implements Runnable {
 	private boolean update;
 	private long volumeID;
 	private boolean useSSL;
+	private boolean mountVolume = false;
+	private boolean unmountVolume = false;
+	private String volumeName = null;
+	private String mountPoint = null;
 	private WebSocketUploadListener ws = null;
 	protected static ConcurrentHashMap<Long, Server> servers = new ConcurrentHashMap<Long, Server>();
 	private String baseURL;
@@ -80,8 +89,8 @@ public class Server implements Runnable {
 	public Server(long volumeID, String hostName, int port, String password, boolean listen, boolean update,
 			boolean useSSL) throws IOException {
 		try {
-			logger = (Logger) LoggerFactory.getLogger("server-" +Long.toString(volumeID));
-			
+			logger = (Logger) LoggerFactory.getLogger("server-" + Long.toString(volumeID));
+
 			this.port = port;
 			this.volumeID = volumeID;
 			this.hostName = hostName;
@@ -89,6 +98,7 @@ public class Server implements Runnable {
 			this.listen = listen;
 			this.update = update;
 			this.useSSL = useSSL;
+
 			String proto = "https";
 			if (!useSSL)
 				proto = "http";
@@ -106,6 +116,25 @@ public class Server implements Runnable {
 		synchronized (this) {
 			try {
 				if (this.closed) {
+					if (this.mountVolume && MountService.isThisMyIpAddress(InetAddress.getByName(this.hostName))) {
+						StringBuilder sb = new StringBuilder();
+						Formatter formatter = new Formatter(sb);
+						logger.debug("Checking if volume is up for " + this.volumeName);
+						formatter.format("file=%s&cmd=dse-info", "null");
+						String url = baseURL + sb.toString();
+						formatter.close();
+						logger.debug("sending " + url);
+						try {
+							SDFSHttpClient.getResponse(url);
+						} catch (Exception e) {
+							logger.info("Attemping to mount volume " + this.volumeName);
+							try {
+								MountService.mountHost(this.volumeName, this.mountPoint, logger);
+							} catch (Exception e1) {
+								logger.error("unable to mount volume " + this.volumeName, e1);
+							}
+						}
+					}
 					if (this.listen) {
 						th = new Thread(this);
 						th.start();
@@ -225,7 +254,17 @@ public class Server implements Runnable {
 		ReentrantLock l = this.getLock(evt.getTarget());
 		l.lock();
 		try {
-			this.updateMap.put(evt.getTarget(), evt.getJsonString());
+			if(this.updateMap.containsKey(evt.getTarget()) && evt.isMFUpdate()) {
+				VolumeEvent _evt = new VolumeEvent(this.updateMap.get(evt.getTarget()));
+				if(_evt.isMFDelete()) {
+					evt.setActionType("sfileWritten");
+					this.updateMap.put(evt.getTarget(), evt.getJsonString());
+				} else if(!_evt.isDBUpdate()) {
+					this.updateMap.put(evt.getTarget(), evt.getJsonString());
+				}
+			}else {
+				this.updateMap.put(evt.getTarget(), evt.getJsonString());
+			}
 		} finally {
 			try {
 				this.db.commit();
@@ -252,11 +291,16 @@ public class Server implements Runnable {
 					ws = new WebSocketUploadListener(hostName, port, password, cs);
 					ws.connect(hostName, port);
 				}
-				Thread.sleep(10000);
 			} catch (InterruptedException e) {
 
 			} catch (Exception e) {
 				logger.error("unable run thread ", e);
+			} finally {
+				try {
+					Thread.sleep(10000);
+				} catch (InterruptedException e) {
+
+				}
 			}
 		}
 	}
@@ -283,6 +327,24 @@ public class Server implements Runnable {
 
 				}
 			}
+			try {
+				if (this.unmountVolume && MountService.isThisMyIpAddress(InetAddress.getByName(this.hostName))) {
+					StringBuilder sb = new StringBuilder();
+					Formatter formatter = new Formatter(sb);
+					logger.debug("Checking if volume is up for " + this.volumeName);
+					formatter.format("file=%s&cmd=shutdown", "null");
+					String url = baseURL + sb.toString();
+					formatter.close();
+					logger.debug("sending " + url);
+					try {
+						SDFSHttpClient.getResponse(url);
+					} catch (Exception e) {
+
+					}
+				}
+			} catch (Exception e) {
+
+			}
 
 		}
 	}
@@ -292,15 +354,15 @@ public class Server implements Runnable {
 			System.err.println("config file path must be selected");
 			System.exit(-1);
 		}
+		
 
 		InputStream is = new FileInputStream(args[0]);
-		boolean ldbg =false;
-		
+		boolean ldbg = false;
+
 		String jsonTxt = IOUtils.toString(is, "UTF-8");
 		JsonParser parser = new JsonParser();
 		JsonObject cfg = parser.parse(jsonTxt).getAsJsonObject();
-		
-		
+
 		PERSISTENCE_PATH = cfg.get("persist-path").getAsString();
 		if (!new File(PERSISTENCE_PATH).exists()) {
 			new File(PERSISTENCE_PATH).mkdirs();
@@ -309,13 +371,14 @@ public class Server implements Runnable {
 		if (cfg.has("debug") && cfg.get("debug").getAsBoolean()) {
 			ldbg = cfg.get("debug").getAsBoolean();
 		}
-		if(cfg.has("log-file")) {
+		if (cfg.has("log-file")) {
 			logFile = cfg.get("log-file").getAsString();
-			 	
 
 		}
-		
-		startFileLogging(logFile,ldbg);
+
+		startFileLogging(logFile, ldbg);
+		Logger logger = (Logger) LoggerFactory.getLogger("initialization");
+		logger.info("Starting CopyCat Version " + Server.version + " build time " + Server.ts);
 		JsonArray jar = cfg.getAsJsonArray("servers");
 		for (int i = 0; i < jar.size(); i++) {
 			try {
@@ -330,10 +393,22 @@ public class Server implements Runnable {
 				if (obj.has("useSSL"))
 					useSSL = obj.get("useSSL").getAsBoolean();
 				Server s = new Server(volid, hostName, port, password, listen, update, useSSL);
-				if(obj.has("update-interval"))
+				if (obj.has("update-interval"))
 					s.updateTime = obj.get("update-interval").getAsLong();
-				if(obj.has("check-interval"))
+				if (obj.has("check-interval"))
 					s.checkTime = obj.get("check-interval").getAsLong();
+				if(obj.has("automount")) {
+					s.mountVolume = obj.get("automount").getAsBoolean();
+				}
+				if(obj.has("autounmount")) {
+					s.unmountVolume = obj.get("autounmount").getAsBoolean();
+				}
+				if(obj.has("volumename")) {
+					s.volumeName = obj.get("volumename").getAsString();
+				}
+				if(obj.has("mountpoint")) {
+					s.mountPoint = obj.get("mountpoint").getAsString();
+				}
 			} catch (Exception e) {
 				System.out.println("Unable to attach server");
 				e.printStackTrace();
@@ -342,52 +417,49 @@ public class Server implements Runnable {
 		Server.attachShutDownHook();
 
 	}
-	
-	public static Logger startFileLogging(String logFilePath,boolean debug) {
-		
-	    
-	   
-	    LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
-	    ch.qos.logback.classic.Logger rootLogger = loggerContext.getLogger(ch.qos.logback.classic.Logger.ROOT_LOGGER_NAME);
-	    loggerContext.reset(); 
-	    if(debug)
-	    	rootLogger.setLevel(Level.DEBUG);
-	    else
-	    	rootLogger.setLevel(Level.INFO);
 
-	    RollingFileAppender<ILoggingEvent> rfAppender = new RollingFileAppender<ILoggingEvent>(); 
-	    rfAppender.setContext(loggerContext); 
-	    rfAppender.setFile(logFilePath);
-	    
-	    
+	public static Logger startFileLogging(String logFilePath, boolean debug) {
 
-	    FixedWindowRollingPolicy fwRollingPolicy = new FixedWindowRollingPolicy(); 
-	    fwRollingPolicy.setContext(loggerContext); 
-	    fwRollingPolicy.setFileNamePattern(logFilePath +"-%i.log.zip"); 
-	    fwRollingPolicy.setParent(rfAppender); 
-	    fwRollingPolicy.setMaxIndex(5);
-	    fwRollingPolicy.start(); 
+		LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+		ch.qos.logback.classic.Logger rootLogger = loggerContext
+				.getLogger(ch.qos.logback.classic.Logger.ROOT_LOGGER_NAME);
+		loggerContext.reset();
+		if (debug)
+			rootLogger.setLevel(Level.DEBUG);
+		else
+			rootLogger.setLevel(Level.INFO);
 
-	    SizeBasedTriggeringPolicy<ILoggingEvent> triggeringPolicy = new SizeBasedTriggeringPolicy<ILoggingEvent>(); 
-	    triggeringPolicy.setMaxFileSize(FileSize.valueOf("10MB")); 
-	    triggeringPolicy.start(); 
+		RollingFileAppender<ILoggingEvent> rfAppender = new RollingFileAppender<ILoggingEvent>();
+		rfAppender.setContext(loggerContext);
+		rfAppender.setFile(logFilePath);
 
-	    PatternLayoutEncoder encoder = new PatternLayoutEncoder();
-	    encoder.setContext(loggerContext); 
-	    encoder.setPattern("%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"); 
-	    encoder.start(); 
+		FixedWindowRollingPolicy fwRollingPolicy = new FixedWindowRollingPolicy();
+		fwRollingPolicy.setContext(loggerContext);
+		fwRollingPolicy.setFileNamePattern(logFilePath + "-%i.log.zip");
+		fwRollingPolicy.setParent(rfAppender);
+		fwRollingPolicy.setMaxIndex(5);
+		fwRollingPolicy.start();
 
-	    rfAppender.setEncoder(encoder); 
-	    rfAppender.setRollingPolicy(fwRollingPolicy); 
-	    rfAppender.setTriggeringPolicy(triggeringPolicy); 
-	    rfAppender.start(); 
+		SizeBasedTriggeringPolicy<ILoggingEvent> triggeringPolicy = new SizeBasedTriggeringPolicy<ILoggingEvent>();
+		triggeringPolicy.setMaxFileSize(FileSize.valueOf("10MB"));
+		triggeringPolicy.start();
 
-	    rootLogger.addAppender(rfAppender); 
+		PatternLayoutEncoder encoder = new PatternLayoutEncoder();
+		encoder.setContext(loggerContext);
+		encoder.setPattern("%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n");
+		encoder.start();
 
-	    // generate some output 
+		rfAppender.setEncoder(encoder);
+		rfAppender.setRollingPolicy(fwRollingPolicy);
+		rfAppender.setTriggeringPolicy(triggeringPolicy);
+		rfAppender.start();
 
-	    StatusPrinter.print(loggerContext); 
-        return rootLogger;
+		rootLogger.addAppender(rfAppender);
+
+		// generate some output
+
+		StatusPrinter.print(loggerContext);
+		return rootLogger;
 
 	}
 
@@ -405,8 +477,7 @@ public class Server implements Runnable {
 	}
 
 	public static void main(String[] args) throws IOException, InterruptedException {
-		
-		
+
 		setup(args);
 		startServers();
 		if (args.length > 1) {
@@ -432,8 +503,8 @@ public class Server implements Runnable {
 		Thread th = null;
 
 		protected UpdateProcessor(Server s) {
-			logger = (Logger)LoggerFactory.getLogger("update-"+s.volumeID);
-			
+			logger = (Logger) LoggerFactory.getLogger("update-" + s.volumeID);
+
 			this.s = s;
 			th = new Thread(this);
 			th.start();
@@ -452,7 +523,7 @@ public class Server implements Runnable {
 							try {
 								VolumeEvent evt = new VolumeEvent(s.updateMap.get(file));
 								long ts = System.currentTimeMillis() - evt.getInternalTS();
-								
+
 								if (ts > s.updateTime) {
 									if (evt.getVolumeID() != this.s.volumeID) {
 										if (evt.isMFUpdate()) {
@@ -478,7 +549,7 @@ public class Server implements Runnable {
 												Formatter formatter = new Formatter(sb);
 												logger.debug("Deleting File [" + file + "] ");
 												formatter.format(
-														"file=%s&cmd=%s&options=%s&changeid=%s&retentionlock=true",
+														"file=%s&cmd=%s&options=%s&changeid=%s&retentionlock=true&localonly=true",
 														URLEncoder.encode(file, "UTF-8"), "deletefile", "",
 														evt.getChangeID());
 												String url = s.baseURL + sb.toString();
@@ -488,7 +559,8 @@ public class Server implements Runnable {
 												set.remove(file);
 												s.updateMap.remove(file);
 											} catch (SDFSHttpMsgException e) {
-												logger.debug("Delete File ["+ file +"] failed because " + e.getMessage());
+												logger.debug(
+														"Delete File [" + file + "] failed because " + e.getMessage());
 												set.remove(file);
 												s.updateMap.remove(file);
 											} catch (Exception e) {
@@ -521,8 +593,8 @@ public class Server implements Runnable {
 										logger.debug("ignoring");
 									}
 								} else {
-									logger.debug("Waiting on event time diff =" +ts);
-									
+									logger.debug("Waiting on event time diff =" + ts);
+
 								}
 
 							} finally {

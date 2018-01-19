@@ -1,4 +1,5 @@
 package com.datish.copycat.events;
+import java.io.File;
 /**
  * Copyright 2016 Datish Systems LLC
 
@@ -56,11 +57,24 @@ public class VolumeEvent implements Serializable {
 		this.target = obj.get("object").getAsString();
 		if(obj.has("file"))
 			this.target = obj.get("file").getAsString();
+		while (this.target.startsWith("/"))
+			this.target = this.target.substring(1);
+		while (this.target.startsWith("\\"))
+			this.target = this.target.substring(1);
+		obj.addProperty("target", this.target);
 		this.jsonStr = obj.toString();
 	}
 	
 	public String getJsonString() {
 		return this.jsonStr;
+	}
+	
+	public void setActionType(String actionType) {
+		this.actionType = actionType;
+		JsonParser parser = new JsonParser();
+		obj = parser.parse(jsonStr).getAsJsonObject();
+		obj.addProperty("actionType", this.target);
+		this.jsonStr = obj.toString();
 	}
 	
 	public String getChangeID() {
