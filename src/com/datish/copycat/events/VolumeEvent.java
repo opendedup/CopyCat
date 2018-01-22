@@ -1,5 +1,5 @@
 package com.datish.copycat.events;
-import java.io.File;
+
 /**
  * Copyright 2016 Datish Systems LLC
 
