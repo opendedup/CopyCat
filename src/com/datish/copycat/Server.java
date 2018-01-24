@@ -254,10 +254,15 @@ public class Server implements Runnable {
 		ReentrantLock l = this.getLock(evt.getTarget());
 		l.lock();
 		try {
-			if(this.updateMap.containsKey(evt.getTarget()) && (evt.isMFUpdate() || evt.isDBUpdate())) {
+			if(this.updateMap.containsKey(evt.getTarget())) {
 				VolumeEvent _evt = new VolumeEvent(this.updateMap.get(evt.getTarget()));
-				if(!_evt.isMFDelete())
+				if(evt.isMFDelete()) {
 					this.updateMap.put(evt.getTarget(), evt.getJsonString());
+				} else if(evt.isDBUpdate() && !_evt.isMFDelete()) {
+					this.updateMap.put(evt.getTarget(), evt.getJsonString());
+				} else {
+					logger.info("ignorining event " + evt.getJsonString());
+				}
 			}else {
 				this.updateMap.put(evt.getTarget(), evt.getJsonString());
 			}
@@ -522,24 +527,7 @@ public class Server implements Runnable {
 
 								if (ts > s.updateTime) {
 									if (evt.getVolumeID() != this.s.volumeID) {
-										if (evt.isMFUpdate()) {
-											try {
-												StringBuilder sb = new StringBuilder();
-												Formatter formatter = new Formatter(sb);
-												logger.debug("Updating File [" + file + "] ");
-												formatter.format("file=%s&cmd=cloudfile&overwrite=true&changeid=%s",
-														URLEncoder.encode(file, "UTF-8"), evt.getChangeID());
-												String url = s.baseURL + sb.toString();
-												formatter.close();
-												logger.debug("sending " + url);
-												SDFSHttpClient.getResponse(url);
-												set.remove(file);
-												s.updateMap.remove(file);
-											} catch (Exception e) {
-												logger.debug("unable to update " + file + " on " + this.s.hostName + ":"
-														+ this.s.port, e);
-											}
-										} else if (evt.isMFDelete()) {
+										if (evt.isMFDelete()) {
 											try {
 												StringBuilder sb = new StringBuilder();
 												Formatter formatter = new Formatter(sb);
