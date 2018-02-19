@@ -17,8 +17,6 @@ limitations under the License.
  */
 import java.io.File;
 
-
-
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -256,15 +254,17 @@ public class Server implements Runnable {
 		ReentrantLock l = this.getLock(evt.getTarget());
 		l.lock();
 		try {
-			if(this.updateMap.containsKey(evt.getTarget())) {
+			if (this.updateMap.containsKey(evt.getTarget())) {
 				VolumeEvent _evt = new VolumeEvent(this.updateMap.get(evt.getTarget()));
-				if(_evt.getVolumeTS() < evt.getVolumeTS()) {
-					this.updateMap.put(evt.getTarget(), evt.getJsonString());
-				} 
-				else {
-					logger.info("ignorining event " + evt.getJsonString() +"because timestamp " + evt.getVolumeTS() +" < " + _evt.getVolumeTS());
+				if (evt.isDBDelete() || evt.isMFDelete() || evt.isDBUpdate()) {
+					if (_evt.getVolumeTS() < evt.getVolumeTS()) {
+						this.updateMap.put(evt.getTarget(), evt.getJsonString());
+					} else {
+						logger.info("ignorining event " + evt.getJsonString() + "because timestamp " + evt.getVolumeTS()
+								+ " < " + _evt.getVolumeTS());
+					}
 				}
-			}else {
+			} else {
 				this.updateMap.put(evt.getTarget(), evt.getJsonString());
 			}
 		} finally {
@@ -356,7 +356,6 @@ public class Server implements Runnable {
 			System.err.println("config file path must be selected");
 			System.exit(-1);
 		}
-		
 
 		InputStream is = new FileInputStream(args[0]);
 		boolean ldbg = false;
@@ -399,18 +398,19 @@ public class Server implements Runnable {
 					s.updateTime = obj.get("update-interval").getAsLong();
 				if (obj.has("check-interval"))
 					s.checkTime = obj.get("check-interval").getAsLong();
-				if(obj.has("automount")) {
+				if (obj.has("automount")) {
 					s.mountVolume = obj.get("automount").getAsBoolean();
 				}
-				if(obj.has("autounmount")) {
+				if (obj.has("autounmount")) {
 					s.unmountVolume = obj.get("autounmount").getAsBoolean();
 				}
-				if(obj.has("volumename")) {
+				if (obj.has("volumename")) {
 					s.volumeName = obj.get("volumename").getAsString();
 				}
-				if(obj.has("mountpoint")) {
+				if (obj.has("mountpoint")) {
 					s.mountPoint = obj.get("mountpoint").getAsString();
-				} if(obj.has("ignore-md-updates")) {
+				}
+				if (obj.has("ignore-md-updates")) {
 					s.ignoreMDUpdates = obj.get("ignore-md-updates").getAsBoolean();
 				}
 			} catch (Exception e) {
@@ -540,7 +540,7 @@ public class Server implements Runnable {
 												String url = s.baseURL + sb.toString();
 												formatter.close();
 												logger.debug("ignore sending " + url);
-												//SDFSHttpClient.getResponse(url);
+												// SDFSHttpClient.getResponse(url);
 												set.remove(file);
 												s.updateMap.remove(file);
 											} catch (Exception e) {
