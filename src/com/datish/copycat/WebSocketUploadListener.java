@@ -15,6 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
  */
 import java.io.UnsupportedEncodingException;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
@@ -29,18 +30,19 @@ import org.java_websocket.client.DefaultSSLWebSocketClientFactory;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.drafts.Draft_17;
 import org.java_websocket.handshake.ServerHandshake;
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.datish.copycat.events.VolumeEvent;
 import com.datish.copycat.util.EasyX509TrustManager;
 import com.google.common.eventbus.EventBus;
 
+import ch.qos.logback.classic.Logger;
+
 
 public class WebSocketUploadListener extends WebSocketClient {
 	private boolean closed = true;
 	private static EventBus eventUploadBus = new EventBus();
-	Logger logger = LoggerFactory.getLogger(WebSocketUploadListener.class);
+	Logger logger = (Logger) LoggerFactory.getLogger(WebSocketUploadListener.class);
 	public static void registerEvents(Object obj) {
 		eventUploadBus.register(obj);
 	}

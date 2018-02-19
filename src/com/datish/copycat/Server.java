@@ -18,6 +18,7 @@ limitations under the License.
 import java.io.File;
 
 
+
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -71,6 +72,7 @@ public class Server implements Runnable {
 	private boolean mountVolume = false;
 	private boolean unmountVolume = false;
 	private String volumeName = null;
+	private boolean ignoreMDUpdates = true;
 	private String mountPoint = null;
 	private WebSocketUploadListener ws = null;
 	protected static ConcurrentHashMap<Long, Server> servers = new ConcurrentHashMap<Long, Server>();
@@ -256,12 +258,11 @@ public class Server implements Runnable {
 		try {
 			if(this.updateMap.containsKey(evt.getTarget())) {
 				VolumeEvent _evt = new VolumeEvent(this.updateMap.get(evt.getTarget()));
-				if(evt.isMFDelete()) {
+				if(_evt.getVolumeTS() < evt.getVolumeTS()) {
 					this.updateMap.put(evt.getTarget(), evt.getJsonString());
-				} else if(evt.isDBUpdate() && !_evt.isMFDelete()) {
-					this.updateMap.put(evt.getTarget(), evt.getJsonString());
-				} else {
-					logger.info("ignorining event " + evt.getJsonString());
+				} 
+				else {
+					logger.info("ignorining event " + evt.getJsonString() +"because timestamp " + evt.getVolumeTS() +" < " + _evt.getVolumeTS());
 				}
 			}else {
 				this.updateMap.put(evt.getTarget(), evt.getJsonString());
@@ -409,6 +410,8 @@ public class Server implements Runnable {
 				}
 				if(obj.has("mountpoint")) {
 					s.mountPoint = obj.get("mountpoint").getAsString();
+				} if(obj.has("ignore-md-updates")) {
+					s.ignoreMDUpdates = obj.get("ignore-md-updates").getAsBoolean();
 				}
 			} catch (Exception e) {
 				System.out.println("Unable to attach server");
@@ -527,7 +530,24 @@ public class Server implements Runnable {
 
 								if (ts > s.updateTime) {
 									if (evt.getVolumeID() != this.s.volumeID) {
-										if (evt.isMFDelete()) {
+										if (evt.isMFUpdate() && !s.ignoreMDUpdates) {
+											try {
+												StringBuilder sb = new StringBuilder();
+												Formatter formatter = new Formatter(sb);
+												logger.debug("Updating File [" + file + "] ");
+												formatter.format("file=%s&cmd=cloudfile&overwrite=true&changeid=%s",
+														URLEncoder.encode(file, "UTF-8"), evt.getChangeID());
+												String url = s.baseURL + sb.toString();
+												formatter.close();
+												logger.debug("ignore sending " + url);
+												//SDFSHttpClient.getResponse(url);
+												set.remove(file);
+												s.updateMap.remove(file);
+											} catch (Exception e) {
+												logger.debug("unable to update " + file + " on " + this.s.hostName + ":"
+														+ this.s.port, e);
+											}
+										} else if (evt.isMFDelete()) {
 											try {
 												StringBuilder sb = new StringBuilder();
 												Formatter formatter = new Formatter(sb);
